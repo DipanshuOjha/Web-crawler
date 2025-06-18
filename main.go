@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/DipanshuOjha/Web-crawler/crawler"
@@ -37,14 +38,27 @@ func main() {
 
 	fmt.Println("Starting to get your links.....")
 
-	visited := map[string]bool{}
+	visited := &sync.Map{}
+	var wg sync.WaitGroup
+	linkchan := make(chan string, 100)
 
-	links, err := crawler.Crawl(url, depth, visited)
+	links := []string{}
+	start := time.Now()
+	go func() {
+		defer close(linkchan)
+		wg.Add(1)
+		go crawler.Crawl(url, depth, visited, &wg, linkchan)
+		wg.Wait()
+	}()
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error crawling %s: %v\n", url, err)
-		os.Exit(1)
+	for link := range linkchan {
+		links = append(links, link)
 	}
+
+	end := time.Now()
+	diff := end.Sub(start).Seconds()
+
+	fmt.Println("total time taken in secs before go rotines ", diff)
 
 	if len(links) == 0 {
 		fmt.Println("No links found on the page.")

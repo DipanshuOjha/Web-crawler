@@ -4,38 +4,47 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"golang.org/x/net/html"
 )
 
-func Crawl(url string, depth int, visited map[string]bool) ([]string, error) {
+func Crawl(url string, depth int, visited *sync.Map, wg *sync.WaitGroup, linkchan chan<- string) error {
+	defer wg.Done()
 
 	if depth <= 0 {
-		return []string{}, nil
+		return nil
 	}
 
-	if visited[url] {
-		return []string{}, nil
+	if _, loaded := visited.LoadOrStore(url, true); loaded {
+		return nil
 	}
 
-	visited[url] = true
+	client := &http.Client{Timeout: 10 * time.Second}
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
 
 	if err != nil {
-		return nil, fmt.Errorf("error while fecthing the url ,%v", err)
+		return fmt.Errorf("error while creatignn request %s : %v", url, err)
+	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return fmt.Errorf("error while fetching detail %s : %s", url, err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("bad status check out :- ,%s", resp.Status)
+		return fmt.Errorf("bad status check out :- ,%s", resp.Status)
 	}
 
 	doc, err := html.Parse(resp.Body)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse the html page")
+		return fmt.Errorf("failed to parse the html page")
 	}
 	var links []string
 	var node func(n *html.Node, links *[]string)
@@ -58,22 +67,23 @@ func Crawl(url string, depth int, visited map[string]bool) ([]string, error) {
 
 	node(doc, &links)
 
-	allLink := links
+	for _, link := range links {
+		linkchan <- link
+	}
+
+	// setting limit till 5
+	if len(links) > 5 {
+		links = links[:5]
+	}
 
 	for _, link := range links {
 
-		if !visited[link] {
-			childlinks, err := Crawl(link, depth-1, visited)
-
-			if err != nil {
-				fmt.Println("Error for exploring this link ", link, err)
-				continue
-			}
-
-			allLink = append(allLink, childlinks...)
+		if _, loaded := visited.Load(link); !loaded {
+			wg.Add(1)
+			go Crawl(link, depth-1, visited, wg, linkchan)
 		}
 	}
 
-	return links, nil
+	return nil
 
 }
