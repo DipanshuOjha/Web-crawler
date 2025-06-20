@@ -39,6 +39,7 @@ func main() {
 	fmt.Println("Starting to get your links.....")
 
 	visited := &sync.Map{}
+	uniquelink := &sync.Map{}
 	var wg sync.WaitGroup
 	linkchan := make(chan string, 100)
 
@@ -52,7 +53,9 @@ func main() {
 	}()
 
 	for link := range linkchan {
-		links = append(links, link)
+		if _, loaded := uniquelink.LoadOrStore(link, true); !loaded {
+			links = append(links, link)
+		}
 	}
 
 	end := time.Now()
@@ -65,7 +68,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Found %d links on %s:\n", len(links), url)
+	fmt.Printf("Found %d unique links on %s:\n", len(links), url)
 	for i, link := range links {
 		fmt.Printf("%d. %s\n", i+1, link)
 		time.Sleep(time.Millisecond * 300)
