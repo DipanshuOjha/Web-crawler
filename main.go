@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -11,32 +11,22 @@ import (
 )
 
 func main() {
+	urlPtr := flag.String("url", "https://example.com", "Starting URL to crawl")
+	depthPtr := flag.Int("depth", 2, "Crawl depth (non-negative integer)")
+	concurrencyPtr := flag.Int("concurrency", 10, "Max concurrent goroutines")
+	flag.Parse()
 
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <url>\n", os.Args[0])
+	if *depthPtr < 0 {
+		fmt.Fprintln(os.Stderr, "Error: depth must be positive")
 		os.Exit(1)
 	}
 
-	time.Sleep(200 * time.Millisecond)
-	fmt.Println("just got the link...")
-
-	url := os.Args[1]
-
-	depth := 2
-
-	if len(os.Args) > 2 {
-		var err error
-		depth, err := strconv.Atoi(os.Args[2])
-		if err != nil || depth < 0 {
-			fmt.Println("Error: depth must be a non-negative integer")
-			os.Exit(1)
-		} else {
-			time.Sleep(200 * time.Millisecond)
-			fmt.Println("just got the depth......")
-		}
+	if *concurrencyPtr < 1 {
+		fmt.Fprintln(os.Stderr, "Error: concurrency must be positive")
+		os.Exit(1)
 	}
 
-	fmt.Println("Starting to get your links.....")
+	fmt.Printf("Starting to crawl %s (depth=%d, concurrency=%d)...\n", *urlPtr, *depthPtr, *concurrencyPtr)
 
 	visited := &sync.Map{}
 	uniquelink := &sync.Map{}
@@ -44,12 +34,12 @@ func main() {
 	linkchan := make(chan string, 100)
 
 	links := []string{}
-	sem := make(chan struct{}, 10) // Semaphore: 10 concurrent goroutines to limit the gorotines
+	sem := make(chan struct{}, *concurrencyPtr) // Semaphore: 10 concurrent goroutines to limit the gorotines
 	start := time.Now()
 	go func() {
 		defer close(linkchan)
 		wg.Add(1)
-		go crawler.Crawl(url, depth, visited, &wg, linkchan, sem)
+		go crawler.Crawl(*urlPtr, *depthPtr, visited, &wg, linkchan, sem)
 		wg.Wait()
 	}()
 
@@ -69,7 +59,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Found %d unique links on %s:\n", len(links), url)
+	fmt.Printf("Found %d unique links on %s:\n", len(links), *urlPtr)
 	for i, link := range links {
 		fmt.Printf("%d. %s\n", i+1, link)
 		time.Sleep(time.Millisecond * 300)
