@@ -44,11 +44,12 @@ func main() {
 	linkchan := make(chan string, 100)
 
 	links := []string{}
+	sem := make(chan struct{}, 10) // Semaphore: 10 concurrent goroutines to limit the gorotines
 	start := time.Now()
 	go func() {
 		defer close(linkchan)
 		wg.Add(1)
-		go crawler.Crawl(url, depth, visited, &wg, linkchan)
+		go crawler.Crawl(url, depth, visited, &wg, linkchan, sem)
 		wg.Wait()
 	}()
 

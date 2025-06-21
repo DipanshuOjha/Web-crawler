@@ -10,7 +10,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-func Crawl(url string, depth int, visited *sync.Map, wg *sync.WaitGroup, linkchan chan<- string) error {
+func Crawl(url string, depth int, visited *sync.Map, wg *sync.WaitGroup, linkchan chan<- string, sem chan struct{}) error {
 	defer wg.Done()
 
 	if depth <= 0 {
@@ -79,8 +79,12 @@ func Crawl(url string, depth int, visited *sync.Map, wg *sync.WaitGroup, linkcha
 	for _, link := range links {
 
 		if _, loaded := visited.Load(link); !loaded {
+			sem <- struct{}{}
 			wg.Add(1)
-			go Crawl(link, depth-1, visited, wg, linkchan)
+			go func(link string) {
+				Crawl(link, depth-1, visited, wg, linkchan, sem)
+				<-sem
+			}(link)
 		}
 	}
 
